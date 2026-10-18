@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StickMouse</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#2563eb">
+<style>
+  :root {
+    --bg: #f3f4f6; --panel: #ffffff; --text: #111827; --muted: #6b7280;
+    --border: #d1d5db; --accent: #2563eb; --accent-text: #ffffff;
+    --ok: #15803d; --bad: #b91c1c; --pad: #e5e7eb; --pad-active: #dbeafe;
+  }
+  :root { color-scheme: light; }
+  /* Dark: system preference unless "Jasny" is chosen, or "Ciemny" forced. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0f1115; --panel: #1a1d24; --text: #e5e7eb; --muted: #9ca3af;
+      --border: #374151; --accent: #3b82f6; --accent-text: #ffffff;
+      --ok: #22c55e; --bad: #ef4444; --pad: #232733; --pad-active: #1e3a5f;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1115; --panel: #1a1d24; --text: #e5e7eb; --muted: #9ca3af;
+    --border: #374151; --accent: #3b82f6; --accent-text: #ffffff;
+    --ok: #22c55e; --bad: #ef4444; --pad: #232733; --pad-active: #1e3a5f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 18px/1.4 "Segoe UI", system-ui, sans-serif;
+  }
+  /* Everything fits one window: the pad takes whatever height is left. */
+  main {
+    max-width: 1400px; height: 100vh; margin: 0 auto; padding: 12px 16px;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px;
+  }
+  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  header button { min-height: 48px; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 auto 0 0; }
+  .status { display: flex; gap: 8px; }
+  .chip {
+    padding: 8px 14px; border-radius: 999px; font-weight: 600; color: #fff;
+    background: var(--bad);
+  }
+  .chip.on { background: var(--ok); }
+  /* Widths of the longest text, so status or profile changes don't shift the header. */
+  #chipPc { min-width: 116px; text-align: center; }
+  #chipBle { min-width: 190px; text-align: center; }
+  .chip.info {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip svg {
+    width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .chip.info.low { background: var(--bad); color: #fff; border-color: var(--bad); }
+  .chip[hidden] { display: none; }
+  button {
+    font: inherit; font-weight: 600; min-height: 56px; padding: 0 20px;
+    border-radius: 12px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.active { background: var(--accent); color: var(--accent-text); }
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 12px; min-height: 0; }
+  .keyboard { display: grid; gap: 8px; padding: 10px; }
+  .keyboard h2 { margin: 0; }
+  .keyboard form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .keyboard input[type=text] { min-width: 0; width: 100%; }
+  .keyboard.live { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .toggle { display: flex; gap: 8px; align-items: center; font-size: 16px; cursor: pointer; }
+  .toggle input { width: 22px; height: 22px; }
+  /* Navigation bar like on a phone: Back, Home, Recents; icon above label. */
+  .main-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .side .main-keys button { flex-direction: column; gap: 4px; height: 72px; padding: 6px 4px; font-size: 15px; line-height: 1.15; }
+  .main-keys button svg { width: 28px; height: 28px; }
+  .side button { min-height: 48px; padding: 0 10px; font-size: 16px; }
+  button span:empty { display: none; }
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+  button[hidden] { display: none; }
+  button svg {
+    width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* Fixed height (room for a two-line label) so switching profiles never
+     resizes the pad. */
+  .shortcuts button {
+    justify-content: flex-start; gap: 8px; height: 52px; padding: 4px 10px;
+    font-size: 15px; line-height: 1.15; text-align: left;
+  }
+  .shortcuts button svg { width: 24px; height: 24px; }
+  #pad {
+    min-height: 0; border-radius: 16px;
+    border: 2px dashed var(--border); background: var(--pad);
+    display: grid; place-items: center; text-align: center;
+    color: var(--muted); user-select: none; touch-action: none; cursor: crosshair;
+  }
+  #pad.dragging { background: var(--pad-active); border-color: var(--accent); }
+  #pad.locked { background: var(--pad-active); border-style: solid; border-color: var(--accent); cursor: none; }
+  .side { display: grid; gap: 8px; align-content: start; min-height: 0; overflow: auto; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .panel h2 { font-size: 16px; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
+  /* Two fixed rows of 7: every slot keeps its place across profiles. */
+  .shortcuts { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+  dialog {
+    padding: 0; border: none; background: transparent; color: var(--text);
+    width: min(900px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .dlg-head h2 { margin: 0; }
+  @media (max-height: 680px) {
+    .keyboard h2 { display: none; }
+    .side button, .keyboard input[type=text] { min-height: 44px; }
+    .shortcuts button { height: 44px; font-size: 14px; }
+    .side .main-keys button { height: 64px; }
+    .shortcuts button svg { width: 20px; height: 20px; }
+  }
+  /* Small or narrow windows: stack and scroll instead of squeezing. */
+  @media (max-width: 800px), (max-height: 560px) {
+    main { height: auto; }
+    .layout { grid-template-columns: 1fr; }
+    #pad { min-height: max(60vh, 320px); }
+    .side { overflow: visible; }
+    .shortcuts { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  }
+  /* Phone: pad on top, then navigation and scrolling, typing last. */
+  @media (max-width: 800px) {
+    main { padding: 8px; gap: 8px; }
+    header { gap: 6px; }
+    h1 { font-size: 18px; }
+    header button { min-height: 44px; padding: 0 12px; }
+    .profiles button, #chipPc, #chipBle { min-width: 0; }
+    .chip { padding: 6px 10px; font-size: 15px; }
+    #pad { min-height: 0; height: 52vh; }
+    .side .keyboard { order: 1; }
+  }
+  /* Touch screens: gestures instead of mouse capture. */
+  .hint-touch { display: none; }
+  @media (pointer: coarse) {
+    .hint-mouse, #btnLock { display: none; }
+    .hint-touch { display: block; }
+    #btnDrag { grid-column: 1 / -1; }
+    button { touch-action: manipulation; }
+    #pad { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type=text] {
+    flex: 1; min-width: 200px; min-height: 56px; font: inherit; padding: 0 14px;
+    border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
+  input[type=range] { width: 100%; height: 32px; }
+  select {
+    min-height: 48px; font: inherit; padding: 0 10px; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
+  label { display: grid; gap: 4px; }
+  #log { font: 13px/1.4 Consolas, monospace; color: var(--muted); max-height: 120px; overflow: auto; white-space: pre-wrap; }
+  #unsupported { display: none; flex-basis: 100%; margin: 0; color: var(--bad); font-weight: 600; }
+  .profiles { display: flex; gap: 8px; }
+  .profiles button { min-width: 120px; }
+  .profiles button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>StickMouse</h1>
+    <div class="profiles" role="group" aria-label="Sterowane urządzenie" id="profiles"></div>
+    <div class="status">
+      <span id="chipPc" class="chip">Stick: brak</span>
+      <span id="chipBle" class="chip">iPad: brak</span>
+      <span id="chipPower" class="chip info" hidden></span>
+    </div>
+    <button id="btnConnect" class="primary" data-icon="plug">USB</button>
+    <button id="btnConnectBt" class="primary" data-icon="bluetooth">Bluetooth</button>
+    <button id="btnSettings" type="button" data-icon="gear">Ustawienia</button>
+    <p id="unsupported">Ta przeglądarka nie obsługuje Web Serial ani Web Bluetooth. Otwórz stronę w Edge lub Chrome.</p>
+  </header>
+
+  <div class="layout">
+    <div id="pad" tabindex="0" aria-label="Pole touchpada">
+      <div class="hint-touch">
+        <strong>Jeden palec</strong> = kursor &middot; stuknięcie = klik<br>
+        Dwa palce = przewijanie &middot; stuknięcie dwoma = menu<br>
+        Przytrzymaj palec = przeciąganie
+      </div>
+      <div class="hint-mouse">
+        <strong>Przeciągaj z wciśniętym lewym przyciskiem</strong> = ruch kursora<br>
+        Krótki klik = tap &middot; <span id="hintRight">Prawy klik = menu</span> &middot; Kółko = przewijanie (Shift + kółko = na boki)<br>
+        „Przechwyć mysz” = cała mysz steruje urządzeniem (wyjście: prawy przycisk lub Esc)
+      </div>
+    </div>
+    <div class="side">
+      <section class="panel keyboard">
+        <h2 id="textTitle">Wpisz tekst</h2>
+        <form id="formText">
+          <input id="inText" type="text" autocomplete="off" spellcheck="false" placeholder="Tekst do wysłania">
+          <button class="primary" type="submit" id="btnSend" data-icon="send">Wyślij</button>
+        </form>
+        <label class="toggle"><input id="inLive" type="checkbox"> Na żywo (każdy klawisz od razu)</label>
+        <div class="grid3">
+          <button data-key="BACKSPACE" type="button" data-icon="backspace">Usuń</button>
+          <button data-key="ENTER" type="button" data-icon="enter">Enter</button>
+          <button id="btnPaste" type="button" data-icon="paste" title="Wklej ze schowka PC">Wklej</button>
+        </div>
+      </section>
+      <div class="main-keys" id="mainKeys" role="group" aria-label="Nawigacja"></div>
+      <div class="grid4">
+        <button data-scroll="1 0" aria-label="Przewiń w górę" title="Przewiń w górę" data-icon="up"></button>
+        <button data-scroll="-1 0" aria-label="Przewiń w dół" title="Przewiń w dół" data-icon="down"></button>
+        <button data-scroll="0 -1" aria-label="Przewiń w lewo" title="Przewiń w lewo" data-icon="left"></button>
+        <button data-scroll="0 1" aria-label="Przewiń w prawo" title="Przewiń w prawo" data-icon="right"></button>
+      </div>
+      <div class="grid2">
+        <button id="btnDrag" data-icon="hand" title="Przytrzymaj lewy przycisk (przeciąganie)">Przytrzymaj</button>
+        <button id="btnLock" data-icon="target">Przechwyć mysz</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="shortcuts" id="shortcuts" aria-label="Skróty"></section>
+</main>
+
+<dialog id="dlgSettings">
+  <section class="panel">
+    <div class="dlg-head">
+      <h2 id="settingsTitle">Ustawienia</h2>
+      <button id="btnCloseSettings" type="button" data-icon="close">Zamknij</button>
+    </div>
+    <div class="grid2">
+      <label>Czułość kursora: <span id="valSens"></span>
+        <input id="inSens" type="range" min="0.2" max="4" step="0.1">
+      </label>
+      <label>Czułość przewijania: <span id="valScroll"></span>
+        <input id="inScroll" type="range" min="0.2" max="4" step="0.1">
+      </label>
+      <label>Długość przesunięcia (przyciski): <span id="valSwipe"></span>
+        <input id="inSwipe" type="range" min="5" max="150" step="5">
+      </label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="row" style="display:flex"><input id="inInvert" type="checkbox"> Odwróć kierunek przewijania</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="row" style="display:flex">Motyw strony:
+        <select id="inTheme">
+          <option value="">systemowy</option><option value="light">jasny</option><option value="dark">ciemny</option>
+        </select>
+      </label>
+      <label class="row" style="display:flex">Wygaszanie ekranu urządzenia:
+        <select id="inScreen" disabled>
+          <option value="30">30 s</option><option value="60">1 min</option>
+          <option value="120">2 min</option><option value="300">5 min</option>
+          <option value="0">nigdy</option>
+        </select>
+      </label>
+      <label class="row" style="display:flex"><input id="inAutoOff" type="checkbox" disabled> Usypiaj urządzenie po odłączeniu zasilania USB</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span>PIN Bluetooth: <strong id="valPin">—</strong></span>
+      <button id="btnNewPin" type="button" data-icon="lock" title="Nowy PIN dla kolejnych połączeń Bluetooth">Nowy PIN</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnHost" type="button" data-icon="bluetooth" disabled>Odłącz</button>
+      <button id="btnBonds" type="button" data-icon="list">Pokaż parowania</button>
+      <button id="btnClearBonds" type="button" data-icon="trash">Usuń parowania</button>
+      <button id="btnCopyLog" type="button" data-icon="copy">Kopiuj log</button>
+    </div>
+    <div id="log" style="margin-top:10px"></div>
+  </section>
+</dialog>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const pad = $("pad");
+
+// ---------- icons (24x24 stroke paths) ----------
+const ICONS = {
+  plug: "M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4",
+  bluetooth: "M7 7l10 10-5 5V2l5 5L7 17",
+  send: "M22 2 11 13M22 2l-7 20-4-9-9-4z",
+  backspace: "M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM18 9l-6 6M12 9l6 6",
+  enter: "M20 4v7a4 4 0 0 1-4 4H4M9 10l-5 5 5 5",
+  hand: "M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 16 0v-3a2 2 0 0 0-4 0",
+  up: "M12 19V5M5 12l7-7 7 7",
+  down: "M12 5v14M19 12l-7 7-7-7",
+  left: "M19 12H5M12 19l-7-7 7-7",
+  right: "M5 12h14M12 5l7 7-7 7",
+  target: "M12 2v4M12 18v4M2 12h4M18 12h4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
+  tablet: "M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM12 18h.01",
+  phone: "M9 2h6a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM12 18h.01",
+  home: "M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z",
+  // Three cards, the middle one in front: the app switcher carousel.
+  recents: "M10 3h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM3 6h2a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM19 6h2a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z",
+  swap: "M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16",
+  sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+  back: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
+  bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.35-4.35",
+  mic: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3",
+  camera: "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3zM12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  volup: "M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14",
+  voldown: "M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7",
+  play: "M5 4l9 8-9 8zM16 5v14M20 5v14",
+  mute: "M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6",
+  lock: "M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  sunDim: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 4h.01M12 20h.01M4 12h.01M20 12h.01M6.3 6.3h.01M17.7 17.7h.01M6.3 17.7h.01M17.7 6.3h.01",
+  close: "M18 6 6 18M6 6l12 12",
+  gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1",
+  list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+  trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6",
+  copy: "M9 9h11v11H9zM5 15H4V4h11v1",
+  battery: "M3 7h15a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM22 11v2M6 10v4M10 10v4",
+  paste: "M9 3h6v3H9zM9 4.5H5V21h14V4.5h-4M8 11h8M8 15h8M8 19h5",
+};
+const KEY_ICONS = {
+  HOME: "home", APPSWITCH: "recents", LASTAPP: "swap", CONTROL: "sliders", BACK: "back", NOTIF: "bell", SEARCH: "search", ASSIST: "mic",
+  SCREENSHOT: "camera", VOLUP: "volup", VOLDOWN: "voldown", PLAY: "play", ESC: "close",
+  MUTE: "mute", LOCK: "lock", BRIUP: "sun", BRIDOWN: "sunDim", QUICKSETTINGS: "sliders",
+};
+
+function iconSvg(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", ICONS[name]);
+  svg.appendChild(path);
+  return svg;
+}
+
+// Button = icon + label span, so labels can change without losing the icon.
+function setButton(b, iconName, label) {
+  const span = document.createElement("span");
+  span.textContent = label;
+  b.replaceChildren(...(iconName ? [iconSvg(iconName)] : []), span);
+}
+function setLabel(b, label) { b.querySelector("span").textContent = label; }
+
+document.querySelectorAll("button[data-icon]").forEach((b) => setButton(b, b.dataset.icon, b.textContent));
+
+// ---------- profiles (ids must match firmware/src/profile.cpp) ----------
+// Second row of the shortcut bar, same in every profile.
+const COMMON_KEYS = [
+  ["VOLUP", "Głośniej"], ["VOLDOWN", "Ciszej"], ["MUTE", "Wycisz"], ["PLAY", "Odtwórz / pauza"],
+  ["BRIUP", "Jaśniej", "Jaśniejszy ekran"], ["BRIDOWN", "Ciemniej", "Ciemniejszy ekran"],
+  ["ESC", "Zamknij (Esc)", "Zamknij menu lub okienko (Esc)"],
+];
+const PROFILES = {
+  IPAD: {
+    label: "iPadOS", icon: "tablet",
+    // mainKeys sit under the keyboard; keys go to the bottom panel.
+    mainKeys: [["BACK", "Wstecz"], ["HOME", "Ekran główny"], ["APPSWITCH", "Ostatnie", "Ostatnie aplikacje"]],
+    // Same slot = same function in every profile; null keeps an empty slot.
+    keys: [
+      ["LASTAPP", "Poprzednia aplikacja"], ["NOTIF", "Powiadomienia"], ["CONTROL", "Centrum sterowania"],
+      ["SEARCH", "Szukaj (Spotlight)"], ["ASSIST", "Siri"], ["SCREENSHOT", "Zrzut ekranu"],
+      ["LOCK", "Zablokuj ekran"], ...COMMON_KEYS,
+    ],
+    rightHint: "Prawy klik = menu",
+    defaults: { sens: 1.5, scroll: 1, swipe: 40, invert: false },
+  },
+  ANDROID: {
+    label: "Android", icon: "phone",
+    mainKeys: [["BACK", "Wstecz"], ["HOME", "Ekran główny"], ["APPSWITCH", "Ostatnie", "Ostatnie aplikacje"]],
+    keys: [
+      ["LASTAPP", "Poprzednia aplikacja"], ["NOTIF", "Powiadomienia"], ["QUICKSETTINGS", "Szybkie ustawienia"],
+      ["SEARCH", "Szukaj"], ["ASSIST", "Asystent"], ["SCREENSHOT", "Zrzut ekranu"],
+      ["LOCK", "Zablokuj ekran"], ...COMMON_KEYS,
+    ],
+    rightHint: "Prawy klik = Wstecz",
+    dragScroll: true,  // scroll buttons drag like a finger (see dragSwipe)
+    defaults: { sens: 1.0, scroll: 1, swipe: 40, invert: false },
+  },
+};
+
+// ---------- settings (separate per profile) ----------
+let store = { profile: "IPAD", per: {} };
+try {
+  const raw = JSON.parse(localStorage.getItem("ipadBridge") || "{}");
+  if (raw.per) store = Object.assign(store, raw);
+  else if ("sens" in raw) store.per.IPAD = raw;  // pre-profile format
+} catch (e) {}
+if (!PROFILES[store.profile]) store.profile = "IPAD";
+for (const id in PROFILES) store.per[id] = Object.assign({}, PROFILES[id].defaults, store.per[id]);
+let settings = store.per[store.profile];
+
+function saveSettings() { try { localStorage.setItem("ipadBridge", JSON.stringify(store)); } catch (e) {} }
+
+// The device keeps each profile's settings (CFG), so they follow it to any PC
+// or browser; localStorage is only the copy used before it connects.
+const CFG_KEYS = ["sens", "scroll", "swipe", "invert"];
+const cfgText = (s) => CFG_KEYS.map((k) => k + "=" + (k === "invert" ? (s[k] ? 1 : 0) : s[k])).join(" ");
+let cfgTimer = 0;
+function saveToDevice() {
+  clearTimeout(cfgTimer);
+  const id = store.profile;
+  cfgTimer = setTimeout(() => send("CFG " + id + " " + cfgText(store.per[id])), 600);
+}
+function onCfg(id, text) {
+  if (!PROFILES[id]) return;
+  if (!text) { send("CFG " + id + " " + cfgText(store.per[id])); return; }  // first use: upload ours
+  const s = store.per[id];
+  for (const kv of text.split(" ")) {
+    const [k, v] = kv.split("=");
+    if (!CFG_KEYS.includes(k) || v === undefined || !isFinite(+v)) continue;
+    s[k] = k === "invert" ? v === "1" : +v;
+  }
+  saveSettings();
+  if (id === store.profile) showSettings();
+}
+function onSettingChange() { saveSettings(); saveToDevice(); }
+
+// Theme belongs to this browser, not the profile or device.
+function applyTheme() {
+  if (store.theme) document.documentElement.dataset.theme = store.theme;
+  else delete document.documentElement.dataset.theme;
+  $("inTheme").value = store.theme || "";
+}
+$("inTheme").onchange = (e) => { store.theme = e.target.value; applyTheme(); saveSettings(); };
+applyTheme();
+
+function showSettings() {
+  $("inSens").value = settings.sens; $("inScroll").value = settings.scroll; $("inInvert").checked = settings.invert;
+  $("valSens").textContent = (+settings.sens).toFixed(1);
+  $("valScroll").textContent = (+settings.scroll).toFixed(1);
+  $("inSwipe").value = settings.swipe;
+  $("valSwipe").textContent = settings.swipe;
+}
+$("inSens").oninput = (e) => { settings.sens = +e.target.value; showSettings(); onSettingChange(); };
+$("inScroll").oninput = (e) => { settings.scroll = +e.target.value; showSettings(); onSettingChange(); };
+$("inSwipe").oninput = (e) => { settings.swipe = +e.target.value; showSettings(); onSettingChange(); };
+$("inInvert").onchange = (e) => { settings.invert = e.target.checked; onSettingChange(); };
+
+function renderProfile() {
+  const p = PROFILES[store.profile];
+  settings = store.per[store.profile];
+  document.querySelectorAll("#profiles button").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.profile === store.profile)));
+  // Optional third item: full name for the tooltip when the label is shortened.
+  const keyButton = ([key, label, title]) => {
+    const b = document.createElement("button");
+    setButton(b, KEY_ICONS[key], label);
+    if (title) b.title = b.ariaLabel = title;
+    b.onclick = () => (PAGE_ACTIONS[key] ? PAGE_ACTIONS[key]() : send("K " + key));
+    return b;
+  };
+  $("mainKeys").replaceChildren(...p.mainKeys.map(keyButton));
+  const emptySlot = () => Object.assign(document.createElement("div"), { ariaHidden: "true" });
+  $("shortcuts").replaceChildren(...p.keys.map((k) => (k ? keyButton(k) : emptySlot())));
+  $("textTitle").textContent = "Wpisz tekst: " + p.label;
+  $("settingsTitle").textContent = "Ustawienia: " + p.label;
+  $("hintRight").textContent = p.rightHint;
+  showSettings();
+  setChips();
+}
+
+// Device is the source of truth once connected; it replies with PROFILE.
+function applyProfile(id) {
+  if (!PROFILES[id] || id === store.profile) return;
+  store.profile = id;
+  saveSettings();
+  renderProfile();
+}
+
+for (const id in PROFILES) {
+  const b = document.createElement("button");
+  setButton(b, PROFILES[id].icon, PROFILES[id].label);
+  b.dataset.profile = id;
+  b.onclick = () => {
+    if (link) { send("P " + id); log("Przełączam na: " + PROFILES[id].label); }
+    else applyProfile(id);
+  };
+  $("profiles").appendChild(b);
+}
+
+function log(msg) {
+  const el = $("log");
+  el.textContent = (new Date().toLocaleTimeString() + "  " + msg + "\n" + el.textContent).slice(0, 4000);
+}
+
+// ---------- transport: USB (Web Serial) or Bluetooth (Web Bluetooth) ----------
+// link = { kind: "usb" | "ble", chunk: max bytes per write, write(bytes), close(), port? }
+let link = null;
+let txQueue = "", txBusy = false;
+let lastRx = 0, bleOn = false, bleAddr = "", hostOn = true;
+let power = null;  // { usb, lvl } from POWER / STATUS USB
+const encoder = new TextEncoder();
+const hasSerial = "serial" in navigator, hasBt = "bluetooth" in navigator;
+
+function setChips() {
+  const pcOn = !!link && Date.now() - lastRx < 3000;
+  $("chipPc").className = "chip" + (pcOn ? " on" : "");
+  // Kept short so the header fits one line; the transport shows on the "Rozłącz" icon.
+  $("chipPc").textContent = "Stick: " + (pcOn ? "OK" : "brak");
+  $("chipPc").title = pcOn ? "Połączono przez " + (link.kind === "ble" ? "Bluetooth" : "USB") : "";
+  const ble = pcOn && bleOn;
+  $("chipBle").className = "chip" + (ble ? " on" : "");
+  const label = PROFILES[store.profile].label;
+  $("chipBle").textContent = label + ": " + (ble ? "OK" : pcOn && !hostOn ? "odłączony" : "brak");
+  $("chipBle").title = pcOn && bleAddr ? "Adres Bluetooth: " + bleAddr : "";
+  $("btnHost").disabled = !pcOn;
+  setLabel($("btnHost"), (hostOn ? "Odłącz: " : "Podłącz: ") + label);
+  // Disconnected: both ways offered; connected: only "Rozłącz" for the active one.
+  const kind = link ? link.kind : btDevice ? "ble" : null;
+  $("btnConnect").hidden = !hasSerial || (kind && kind !== "usb");
+  $("btnConnectBt").hidden = !hasBt || (kind && kind !== "ble");
+  setLabel($("btnConnect"), kind === "usb" ? "Rozłącz" : "USB");
+  setLabel($("btnConnectBt"), kind === "ble" ? (link ? "Rozłącz" : "Przerwij łączenie") : "Bluetooth");
+  const chip = $("chipPower");
+  chip.hidden = !pcOn || !power;
+  if (power) {
+    const low = !power.usb && power.lvl >= 0 && power.lvl < 20;
+    chip.className = "chip info" + (low ? " low" : "");
+    const lvl = power.lvl >= 0 ? power.lvl + "%" : "?";
+    chip.title = `Bateria ${lvl}, ` + (power.usb ? "zasilanie z USB" : "praca na baterii");
+    setButton(chip, "battery", lvl + (power.usb ? " · USB" : " · bateria"));
+  }
+}
+
+function send(line) {
+  if (!link) return;
+  txQueue += line + "\n";
+  pump();
+}
+
+// Writes the queue in link-sized pieces; the firmware joins them back into lines.
+async function pump() {
+  if (txBusy) return;
+  txBusy = true;
+  try {
+    while (link && txQueue) {
+      const l = link, bytes = encoder.encode(txQueue);
+      txQueue = "";
+      for (let off = 0; off < bytes.length && link === l;) {
+        const n = Math.min(l.chunk, bytes.length - off);
+        try {
+          const t0 = performance.now();
+          await l.write(bytes.subarray(off, off + n));
+          stats.write.push(performance.now() - t0);
+          off += n;
+        } catch (e) {
+          // Bluetooth: the negotiated MTU may be smaller than hoped; 20 bytes always fits.
+          if (l.kind === "ble" && l.chunk > BT_MIN_CHUNK) { l.chunk = BT_MIN_CHUNK; continue; }
+          log("Błąd zapisu: " + e.message);
+          txQueue = "";
+          break;
+        }
+      }
+    }
+  } finally {
+    txBusy = false;
+  }
+}
+
+function onLine(line) {
+  lastRx = Date.now();
+  if (line === "PONG" && pingAt) { stats.rtt.push(performance.now() - pingAt); pingAt = 0; }
+  else if (line.startsWith("STATUS BLE "))bleOn = line.endsWith("1");
+  else if (line.startsWith("PROFILE ")) applyProfile(line.slice(8));
+  else if (line.startsWith("POWER ")) {
+    const m = /VBUS (-?\d+).*LVL (-?\d+)/.exec(line);
+    if (m) power = { usb: +m[1] >= 4000, lvl: +m[2] };
+  }
+  else if (line.startsWith("STATUS USB ")) { if (power) power.usb = line.endsWith("1"); send("POWER"); }
+  else if (line.startsWith("SCREEN ")) { $("inScreen").value = line.slice(7); $("inScreen").disabled = false; }
+  else if (line.startsWith("AUTOOFF ")) { $("inAutoOff").checked = line.endsWith("1"); $("inAutoOff").disabled = false; }
+  else if (line.startsWith("BLE ")) {
+    log(line);
+    const m = /^BLE ADDR (\S+) \S+ OK (\d).* HOSTON (\d)/.exec(line);
+    if (m) { bleAddr = m[1] + (m[2] === "1" ? "" : " (błąd adresu)"); hostOn = m[3] === "1"; }
+  }
+  else if (line.startsWith("HOST ")) hostOn = line.endsWith("ON");
+  else if (line === "ERR AUTH") { log("Zły lub brak PIN-u Bluetooth"); setTimeout(askPin, 0); }
+  else if (line === "OK AUTH") { if (authRetry) { authRetry = false; sendInit(); } }
+  else if (line.startsWith("PIN ")) { $("valPin").textContent = store.btPin = line.slice(4); saveSettings(); }
+  else if (line.startsWith("CFG ")) { const m = /^CFG (\S+) ?(.*)$/.exec(line); if (m) onCfg(m[1], m[2].trim()); }
+  else if (line === "LOG host on (no PC)") { hostOn = true; log(line); }
+  else if (/^(ERR|LOG|BOND)/.test(line)) log(line);
+  if (textTimer && /^(OK [TK]|ERR)/.test(line)) nextText();
+  setChips();
+}
+
+async function readLines(reader) {
+  let buf = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        onLine(buf.slice(0, i).trim());
+        buf = buf.slice(i + 1);
+      }
+    }
+  } catch (e) { /* port closed */ }
+  reader.releaseLock();
+}
+
+// Phone: the screen must stay on while it controls the device.
+let wakeLock = null;
+async function keepAwake() {
+  if (!("wakeLock" in navigator) || document.hidden || !link || wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch (e) { /* not allowed (e.g. battery saver) */ }
+}
+document.addEventListener("visibilitychange", keepAwake);
+
+// Bluetooth clients log in with the device PIN first (firmware/src/remote.cpp);
+// USB needs none. The PIN is kept here, so it is typed once per browser.
+let authRetry = false;
+function askPin() {
+  const pin = prompt("PIN StickMouse (6 cyfr).\nZnajdziesz go w Ustawieniach strony połączonej przez USB.");
+  if (!pin || !link) return;
+  store.btPin = pin.trim();
+  saveSettings();
+  authRetry = true;
+  send("AUTH " + store.btPin);
+}
+
+function onOpen(l, msg) {
+  link = l;
+  keepAwake();
+  log(msg);
+  if (l.kind === "ble") send("AUTH " + (store.btPin || ""));
+  sendInit();
+}
+
+function sendInit() {
+  send("PING");
+  send("PIN");
+  send("SCREEN");
+  send("AUTOOFF");
+  send("POWER");
+  send("BLE");
+  for (const id in PROFILES) send("CFG " + id);
+  setChips();
+}
+
+async function closeLink(msg = "Rozłączono") {
+  const l = link;
+  link = null; bleOn = false; txQueue = "";
+  if (wakeLock) wakeLock.release().catch(() => {});
+  // Device settings are unknown until it answers again.
+  $("inScreen").disabled = $("inAutoOff").disabled = true;
+  // InvalidStateError: already closed (e.g. cable pulled).
+  try { l && await l.close(); } catch (e) { if (e.name !== "InvalidStateError") log("Błąd zamykania: " + e.message); }
+  log(msg);
+  setChips();
+}
+
+$("inScreen").onchange = (e) => send("SCREEN " + e.target.value);
+$("inAutoOff").onchange = (e) => send("AUTOOFF " + (e.target.checked ? 1 : 0));
+
+// ----- USB -----
+async function openPort(p) {
+  try {
+    await p.open({ baudRate: 115200 });
+  } catch (e) {
+    // Still open from a connection that was not closed cleanly: close it and retry once.
+    let ok = false;
+    if (e.name === "InvalidStateError") {
+      try { await p.close(); await p.open({ baudRate: 115200 }); ok = true; } catch (e2) {}
+    }
+    if (!ok) { log("Nie można otworzyć portu: " + e.message); return; }
+  }
+  const writer = p.writable.getWriter();
+  const decoder = new TextDecoderStream();
+  const piped = p.readable.pipeTo(decoder.writable).catch(() => {});
+  const reader = decoder.readable.getReader();
+  onOpen({
+    kind: "usb", port: p, chunk: Infinity,
+    write: (b) => writer.write(b),
+    // close() fails while the streams are locked and the port would stay open
+    // until the browser restarts, so stop reading and release both sides first.
+    close: async () => {
+      await reader.cancel().catch(() => {});
+      await piped;
+      try { writer.releaseLock(); } catch (e) {}
+      await p.close();
+    },
+  }, "Połączono przez USB");
+  readLines(reader).then(() => { if (link && link.port === p) closeLink(); });
+}
+
+$("btnConnect").onclick = async () => {
+  if (link) return closeLink();
+  try {
+    const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
+    await openPort(p);
+  } catch (e) { if (e.name !== "NotFoundError") log(e.message); }
+};
+
+if (hasSerial) {
+  // The read loop may notice the loss first and close the port itself.
+  navigator.serial.addEventListener("disconnect", (e) => {
+    const msg = "Urządzenie odłączone — czekam na ponowne podłączenie…";
+    if (link && link.port === e.target) closeLink(msg); else log(msg);
+  });
+  navigator.serial.addEventListener("connect", (e) => {
+    if (!link && !btDevice) { log("Urządzenie podłączone — łączę…"); openPort(e.target); }
+  });
+  navigator.serial.getPorts().then((ps) => { if (ps.length && !link && !btDevice) openPort(ps[0]); });
+}
+
+// ----- Bluetooth (Nordic UART Service, UUIDs match firmware/src/remote.cpp) -----
+const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";  // page -> device
+const NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";  // device -> page
+const BT_CHUNK = 180, BT_MIN_CHUNK = 20;
+const BT_RETRY_MS = 3000;
+let btDevice = null;  // set while the user wants a Bluetooth link (also during reconnects)
+let btFailures = 0;
+
+async function openBt(device) {
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(NUS);
+  const rx = await svc.getCharacteristic(NUS_RX);
+  const tx = await svc.getCharacteristic(NUS_TX);
+  const decoder = new TextDecoder();
+  let buf = "";
+  tx.oncharacteristicvaluechanged = (e) => {
+    buf += decoder.decode(e.target.value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      onLine(buf.slice(0, i).trim());
+      buf = buf.slice(i + 1);
+    }
+  };
+  await tx.startNotifications();
+  btFailures = 0;
+  onOpen({
+    kind: "ble", chunk: BT_CHUNK,
+    write: (b) => rx.writeValueWithoutResponse(b),
+    close: async () => device.gatt.disconnect(),
+  }, "Połączono przez Bluetooth: " + device.name);
+}
+
+// Keeps retrying while the user has not pressed "Rozłącz".
+async function reconnectBt() {
+  const device = btDevice;
+  if (!device || link) return;
+  try {
+    await openBt(device);
+  } catch (e) {
+    if (btDevice !== device) return;
+    // A profile switch changes the device's Bluetooth address; the old one never comes back.
+    if (++btFailures === 5) log("Nie mogę się połączyć — jeśli zmieniono profil, kliknij „Przerwij łączenie” i połącz ponownie");
+    setTimeout(reconnectBt, BT_RETRY_MS);
+  }
+}
+
+function watchBt(device) {
+  btDevice = device;
+  btFailures = 0;
+  device.ongattserverdisconnected = () => {
+    if (btDevice !== device) return;
+    if (link && link.kind === "ble") closeLink("Bluetooth rozłączony — łączę ponownie…");
+    setTimeout(reconnectBt, BT_RETRY_MS);
+  };
+}
+
+$("btnConnectBt").onclick = async () => {
+  if (btDevice) {
+    const device = btDevice;
+    btDevice = null;
+    if (link) await closeLink();
+    try { device.gatt.disconnect(); } catch (e) {}
+    setChips();
+    return;
+  }
+  let device;
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      // BLE names from firmware/src/profile.cpp; NUS is not in the advertisement.
+      filters: [{ namePrefix: "iPad Bridge" }, { namePrefix: "Bridge Android" }],
+      optionalServices: [NUS],
+    });
+  } catch (e) {
+    if (e.name !== "NotFoundError") log(e.message);
+    return;
+  }
+  if (link) await closeLink();
+  watchBt(device);
+  log("Łączę przez Bluetooth…");
+  setChips();
+  try { await openBt(device); }
+  catch (e) { log("Bluetooth: " + e.message); setTimeout(reconnectBt, BT_RETRY_MS); }
+};
+
+// Devices allowed earlier (Chrome with the new Bluetooth permissions); reconnect without the chooser.
+if (hasBt && navigator.bluetooth.getDevices) {
+  navigator.bluetooth.getDevices().then((ds) => {
+    if (ds.length && !link) { watchBt(ds[0]); log("Łączę z zapamiętanym urządzeniem Bluetooth…"); reconnectBt(); }
+  }).catch(() => {});
+}
+
+if (!hasSerial && !hasBt) $("unsupported").style.display = "block";
+
+setInterval(() => { pingAt = performance.now(); send("PING"); setChips(); }, 1000);
+
+// Link latency diagnostics: PING round trip and time per write, logged every 10 s.
+let pingAt = 0;
+const stats = { rtt: [], write: [] };
+const summary = (a) => {
+  if (!a.length) return "-";
+  const s = [...a].sort((x, y) => x - y);
+  return `${Math.round(s[s.length >> 1])} ms (max ${Math.round(s[s.length - 1])})`;
+};
+setInterval(() => {
+  if (link && stats.rtt.length) {
+    log(`${link.kind === "ble" ? "Bluetooth" : "USB"}: PING ${summary(stats.rtt)}, zapis ${summary(stats.write)} × ${stats.write.length}`);
+  }
+  stats.rtt = []; stats.write = [];
+}, 10000);
+setInterval(() => send("POWER"), 30000);
+
+// ---------- motion (aggregated, ~100 Hz) ----------
+let accX = 0, accY = 0, accScroll = 0, accScrollH = 0;
+
+// Flick: `swipe` wheel units spread over FLICK_MS with ease-out, like finger inertia.
+const FLICK_MS = 400;
+const flicks = [];
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+function flick(v, h) { flicks.push({ v, h, t0: performance.now(), done: 0 }); }
+function stepFlicks() {
+  const now = performance.now();
+  for (let i = flicks.length - 1; i >= 0; i--) {
+    const f = flicks[i];
+    const p = Math.min(1, (now - f.t0) / FLICK_MS);
+    const d = (easeOut(p) - f.done) * settings.swipe;
+    f.done = easeOut(p);
+    accScroll += f.v * d;
+    accScrollH += f.h * d;
+    if (p >= 1) flicks.splice(i, 1);
+  }
+}
+
+setInterval(() => {
+  stepFlicks();
+  // Link still busy (slow Bluetooth): keep accumulating instead of queueing a backlog.
+  if (txBusy) return;
+  const dx = Math.trunc(accX), dy = Math.trunc(accY);
+  accX -= dx; accY -= dy;
+  sendMove(dx, dy);
+  const sv = Math.trunc(accScroll), sh = Math.trunc(accScrollH);
+  if (sv || sh) {
+    accScroll -= sv; accScrollH -= sh;
+    const c = (v) => Math.max(-127, Math.min(127, v));
+    send(`S ${c(sv)} ${c(sh)}`);
+  }
+}, 10);
+
+function addMove(mx, my) { accX += mx * settings.sens; accY += my * settings.sens; }
+
+// ---------- touchpad ----------
+const TAP_MOVE_PX = 6, TAP_MS = 350;
+let down = null, holding = false;
+
+pad.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// ---------- touch (phone) ----------
+// One finger moves the cursor, tap = click, two fingers scroll, two-finger
+// tap = right click, long press without moving = hold the button (drag).
+const LONG_PRESS_MS = 500, TOUCH_SCROLL_PX = 30;
+const touches = new Map();  // pointerId -> last {x, y}
+let touch = null;           // gesture state from first finger down to last finger up
+
+function touchDown(e) {
+  pad.setPointerCapture(e.pointerId);
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 1) {
+    touch = { t: performance.now(), moved: 0, multi: false, dragging: false };
+    touch.timer = setTimeout(() => {
+      if (!touch || touch.multi || touch.moved >= TAP_MOVE_PX) return;
+      touch.dragging = true;
+      send("D L");
+      pad.classList.add("dragging");
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, LONG_PRESS_MS);
+  } else if (touch) {
+    touch.multi = true;
+    clearTimeout(touch.timer);
+  }
+}
+
+function touchMove(e) {
+  const p = touches.get(e.pointerId);
+  if (!p || !touch) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  touch.moved += Math.abs(dx) + Math.abs(dy);
+  if (touches.size >= 2) {
+    // Each finger reports its own move: average them. Content follows the fingers.
+    const n = touches.size, dir = settings.invert ? -1 : 1;
+    accScroll += dir * (dy / n / TOUCH_SCROLL_PX) * settings.scroll;
+    accScrollH -= dir * (dx / n / TOUCH_SCROLL_PX) * settings.scroll;
+  } else if (!touch.multi) {
+    addMove(dx, dy);
+  }
+}
+
+function touchUp(e) {
+  touches.delete(e.pointerId);
+  if (touches.size || !touch) return;
+  const g = touch;
+  touch = null;
+  clearTimeout(g.timer);
+  pad.classList.remove("dragging");
+  if (g.dragging) { send("U L"); return; }
+  if (performance.now() - g.t >= TAP_MS) return;
+  if (!g.multi && g.moved < TAP_MOVE_PX) send("C L");
+  else if (g.multi && g.moved < TAP_MOVE_PX * 3) send("C R");
+}
+
+pad.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "touch") return touchDown(e);
+  if (document.pointerLockElement === pad) {
+    if (e.button === 0) send("D L");
+    else if (e.button === 2) document.exitPointerLock();  // right button leaves capture mode
+    return;
+  }
+  if (e.button === 2) { send("C R"); return; }
+  if (e.button !== 0) return;
+  pad.setPointerCapture(e.pointerId);
+  down = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 };
+  pad.classList.add("dragging");
+});
+
+pad.addEventListener("pointermove", (e) => {
+  if (e.pointerType === "touch") return touchMove(e);
+  if (document.pointerLockElement === pad) { addMove(e.movementX, e.movementY); return; }
+  if (!down) return;
+  down.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+  addMove(e.movementX, e.movementY);
+});
+
+pad.addEventListener("pointerup", (e) => {
+  if (e.pointerType === "touch") return touchUp(e);
+  if (document.pointerLockElement === pad) {
+    if (e.button === 0) send("U L");
+    return;
+  }
+  if (!down || e.button !== 0) return;
+  const tap = down.moved < TAP_MOVE_PX && performance.now() - down.t < TAP_MS;
+  down = null;
+  pad.classList.remove("dragging");
+  if (tap) send("C L");
+});
+
+pad.addEventListener("pointercancel", (e) => {
+  if (e.pointerType === "touch") return touchUp(e);
+  down = null;
+  pad.classList.remove("dragging");
+});
+
+pad.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  let dx = e.deltaX, dy = e.deltaY;
+  // Shift+wheel = horizontal (some browsers already swap the axes themselves).
+  if (e.shiftKey && dx === 0) { dx = dy; dy = 0; }
+  const unit = e.deltaMode === 1 ? 3 : 100;
+  const dir = settings.invert ? -1 : 1;
+  // HID wheel: + = up; HID pan: + = right.
+  accScroll -= dir * (dy / unit) * settings.scroll;
+  accScrollH += dir * (dx / unit) * settings.scroll;
+}, { passive: false });
+
+// ---------- pointer lock ----------
+function lock() { pad.requestPointerLock && pad.requestPointerLock(); }
+$("btnLock").onclick = lock;
+document.addEventListener("pointerlockchange", () => {
+  const on = document.pointerLockElement === pad;
+  pad.classList.toggle("locked", on);
+  $("btnLock").classList.toggle("active", on);
+  if (!on) send("U L");
+});
+
+// Android scrolls the wheel in jumps and most apps ignore horizontal pan, so there
+// the buttons drag like a finger: press, quick move, release (fling), then the
+// cursor goes back the same way. iPadOS keeps the wheel: a mouse drag selects there.
+const DRAG_STEPS = 12, DRAG_STEP_MS = 10, DRAG_SCALE = 6;
+let dragBusy = false;
+function sendMove(dx, dy) {
+  while (dx || dy) {
+    const sx = Math.max(-127, Math.min(127, dx)), sy = Math.max(-127, Math.min(127, dy));
+    send(`M ${sx} ${sy}`);
+    dx -= sx; dy -= sy;
+  }
+}
+// Moves (tx, ty) in DRAG_STEPS equal steps, DRAG_STEP_MS apart.
+function moveSteps(tx, ty, done) {
+  let sx = 0, sy = 0;
+  for (let i = 1; i <= DRAG_STEPS; i++) {
+    setTimeout(() => {
+      const nx = Math.round(tx * i / DRAG_STEPS), ny = Math.round(ty * i / DRAG_STEPS);
+      sendMove(nx - sx, ny - sy);
+      sx = nx; sy = ny;
+      if (i === DRAG_STEPS) done();
+    }, i * DRAG_STEP_MS);
+  }
+}
+function dragSwipe(v, h) {
+  if (dragBusy || holding || !link) return;
+  dragBusy = true;
+  // Scroll up = content moves down = finger drags down; scroll right = drag left.
+  const dist = settings.swipe * DRAG_SCALE, tx = -h * dist, ty = v * dist;
+  send("D L");
+  moveSteps(tx, ty, () => {
+    send("U L");
+    // Same speed back, so pointer acceleration returns it to the same spot.
+    setTimeout(() => moveSteps(-tx, -ty, () => { dragBusy = false; }), 60);
+  });
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const moveStepsAsync = (tx, ty) => new Promise((r) => moveSteps(tx, ty, r));
+
+// Android has no key for Quick Settings: pull down twice from the top edge, as
+// with a finger (first pull opens notifications, second expands the tiles).
+// The cursor stays at the top, near the tiles.
+async function quickSettings() {
+  if (dragBusy || holding || !link) return;
+  dragBusy = true;
+  for (let i = 0; i < 2; i++) {
+    sendMove(0, -3200);  // pinned to the top edge
+    await sleep(200);
+    send("D L");
+    await moveStepsAsync(0, 480);
+    send("U L");
+    await sleep(600);
+  }
+  sendMove(0, -3200);
+  dragBusy = false;
+}
+// Shortcut buttons handled by the page instead of a firmware key.
+const PAGE_ACTIONS = { QUICKSETTINGS: quickSettings };
+
+const scrollStep = (v, h) => (PROFILES[store.profile].dragScroll ? dragSwipe(v, h) : flick(v, h));
+
+// ---------- buttons ----------
+// Click = one swipe-like flick; hold = continuous flicks until release.
+const HOLD_DELAY_MS = 400, HOLD_REPEAT_MS = 250;
+document.querySelectorAll("[data-scroll]").forEach((b) => {
+  const [v, h] = b.dataset.scroll.split(" ").map(Number);
+  let delay = null, repeat = null;
+  const stop = () => { clearTimeout(delay); clearInterval(repeat); delay = repeat = null; };
+  b.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    scrollStep(v, h);
+    delay = setTimeout(() => { repeat = setInterval(() => scrollStep(v, h), HOLD_REPEAT_MS); }, HOLD_DELAY_MS);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, stop));
+  b.addEventListener("click", (e) => { if (e.detail === 0) scrollStep(v, h); });  // keyboard
+});
+
+$("btnDrag").onclick = () => {
+  holding = !holding;
+  send(holding ? "D L" : "U L");
+  $("btnDrag").classList.toggle("active", holding);
+  setLabel($("btnDrag"), holding ?"Puść (koniec przeciągania)" : "Przytrzymaj (przeciąganie)");
+};
+
+// ---------- keyboard ----------
+// Firmware types ASCII + Polish letters (host keyboard layout: Polish Pro).
+// Other accented letters lose diacritics; typographic punctuation becomes ASCII.
+const POLISH = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ";
+const PUNCT = { "‘": "'", "’": "'", "‚": "'", "“": '"', "”": '"', "„": '"', "–": "-", "—": "-", "…": "...", " ": " " };
+function toTypeable(t) {
+  return Array.from(t.normalize("NFC"), (c) =>
+    POLISH.includes(c) ? c : (PUNCT[c] ?? c.normalize("NFD").replace(/[̀-ͯ]/g, ""))).join("");
+}
+
+// Lines -> Enter, tabs -> Tab; chunks keep each command well under the firmware line buffer.
+// One chunk in flight at a time: typing is slow and Bluetooth has no flow control.
+const TEXT_CHUNK = 80, TEXT_ACK_TIMEOUT_MS = 10000;
+let textQueue = [], textTimer = null;
+function sendText(t) {
+  const lines = toTypeable(t).replace(/\r\n?/g, "\n").split("\n");
+  lines.forEach((line, i) => {
+    if (i) textQueue.push("K ENTER");
+    line.split("\t").forEach((part, j) => {
+      if (j) textQueue.push("K TAB");
+      const chars = Array.from(part);
+      for (let k = 0; k < chars.length; k += TEXT_CHUNK) textQueue.push("T " + chars.slice(k, k + TEXT_CHUNK).join(""));
+    });
+  });
+  if (!textTimer) nextText();
+}
+function nextText() {
+  clearTimeout(textTimer);
+  textTimer = null;
+  if (!link) textQueue = [];
+  if (!textQueue.length) return;
+  send(textQueue.shift());
+  textTimer = setTimeout(nextText, TEXT_ACK_TIMEOUT_MS);
+}
+
+document.querySelectorAll("[data-key]").forEach((b) => b.onclick = () => send("K " + b.dataset.key));
+
+$("formText").onsubmit = (e) => {
+  e.preventDefault();
+  const t = $("inText").value;
+  if (!t) return;
+  sendText(t);
+  $("inText").value = "";
+};
+
+$("btnPaste").onclick = async () => {
+  let t;
+  try { t = await navigator.clipboard.readText(); }
+  catch (e) { log("Brak dostępu do schowka — zezwól przeglądarce albo wklej Ctrl+V w pole tekstu"); return; }
+  if (!t) { log("Schowek jest pusty"); return; }
+  if (t.length > 2000 && !confirm(`Schowek ma ${t.length} znaków, wpisywanie potrwa ok. ${Math.ceil(t.length / 25)} s. Kontynuować?`)) return;
+  log(`Wklejam ${t.length} znaków`);
+  sendText(t);
+};
+
+const LIVE_KEYS = {
+  Backspace: "BACKSPACE", Enter: "ENTER", Tab: "TAB", Escape: "ESC",
+  ArrowLeft: "LEFT", ArrowRight: "RIGHT", ArrowUp: "UP", ArrowDown: "DOWN",
+};
+
+function setLive(on) {
+  store.live = on;
+  saveSettings();
+  $("inLive").checked = on;
+  $("btnSend").hidden = on;
+  document.querySelector(".keyboard").classList.toggle("live", on);
+  $("inText").value = "";
+  $("inText").placeholder = on ? "Kliknij tutaj i pisz" : "Tekst do wysłania";
+}
+$("inLive").onchange = (e) => { setLive(e.target.checked); $("inText").focus(); };
+
+$("inText").addEventListener("keydown", (e) => {
+  // Windows reports AltGr (Polish letters) as Ctrl+Alt.
+  const altGr = e.getModifierState("AltGraph");
+  if (!store.live || e.isComposing || e.metaKey || ((e.ctrlKey || e.altKey) && !altGr)) return;
+  if (LIVE_KEYS[e.key]) {
+    e.preventDefault();
+    send("K " + LIVE_KEYS[e.key]);
+  } else if (e.key.length === 1) {
+    e.preventDefault();
+    const c = toTypeable(e.key);
+    if (c) send("T " + c);
+  }
+});
+
+setLive(!!store.live);
+
+$("btnNewPin").onclick = () => {
+  if (link && confirm("Wygenerować nowy PIN? Inne telefony i komputery łączące się przez Bluetooth będą musiały go wpisać.")) send("PIN NEW");
+};
+$("btnSettings").onclick = () => $("dlgSettings").showModal();
+$("btnCloseSettings").onclick = () => $("dlgSettings").close();
+// Click on the backdrop closes too.
+$("dlgSettings").onclick = (e) => { if (e.target === $("dlgSettings")) $("dlgSettings").close(); };
+$("btnHost").onclick =() => send(hostOn ? "HOST OFF" : "HOST ON");
+$("btnBonds").onclick = () => send("BONDS");
+$("btnCopyLog").onclick = async () => {
+  try { await navigator.clipboard.writeText($("log").textContent); log("Log skopiowany do schowka"); }
+  catch (e) { log("Nie udało się skopiować: " + e.message); }
+};
+$("btnClearBonds").onclick = () => {
+  if (confirm("Usunąć wszystkie parowania? iPad i telefon trzeba będzie sparować od nowa.")) send("BONDS CLEAR");
+};
+
+renderProfile();
+</script>
+</body>
+</html>
