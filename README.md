@@ -28,7 +28,7 @@ StickS3 zasilany z dowolnego USB, telefon łączy się z nim przez Bluetooth i s
 2. Menu ⋮ → *Dodaj do ekranu głównego* — pojawi się ikona StickMouse.
 3. **Bluetooth** → wybierz `iPad Bridge` i wpisz PIN (jednorazowo).
 
-**PIN Bluetooth:** sterowanie przez Bluetooth wymaga 6-cyfrowego PIN-u, żeby nikt w zasięgu nie mógł przejąć tabletu. PIN widać w *Ustawieniach* strony połączonej przez USB (tam też *Nowy PIN*). Przez USB PIN nie jest potrzebny.
+**PIN Bluetooth:** sterowanie przez Bluetooth wymaga 6-cyfrowego PIN-u, żeby nikt w zasięgu nie mógł przejąć tabletu. PIN widać w *Ustawieniach* strony połączonej przez USB (tam też *Zmień PIN*: własne 6 cyfr albo losowy). Przez USB PIN nie jest potrzebny.
 
 Gesty: jeden palec = kursor, stuknięcie = klik, dwa palce = przewijanie, stuknięcie dwoma = menu, przytrzymanie = przeciąganie. Ekran telefonu nie gaśnie, dopóki strona jest połączona.
 

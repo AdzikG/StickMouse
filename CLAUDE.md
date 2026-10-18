@@ -111,7 +111,7 @@ Tekstowy, linia zakończona `\n`, 115200 baud (dla USB CDC prędkość jest umow
 | `CFG <profil> [tekst]` | Ustawienia strony per profil w NVS (`sens=1.5 scroll=1 swipe=40 invert=0`); bez tekstu — odczyt `CFG <profil> <tekst>`, pusty = brak (strona wysyła swoje) |
 | `HOST [ON\|OFF]` | OFF: rozłącza hosta i przestaje się ogłaszać (host zachowuje auto-połączenie). Wraca na ON przy zmianie profilu lub gdy brak PC (USB i BT) |
 | `AUTH <pin>` | Logowanie klienta Bluetooth (NUS); do tego czasu jego zapisy są odrzucane i nie dostaje powiadomień. USB nie wymaga |
-| `PIN [NEW]` | Odczyt / nowy 6-cyfrowy PIN (NVS); nowy obowiązuje od kolejnych połączeń |
+| `PIN [NEW \| SET <6 cyfr>]` | Odczyt, losowy albo własny PIN (NVS); nowy obowiązuje od kolejnych połączeń |
 | `PING` | Test połączenia |
 
 ### Urządzenie → PC

@@ -93,6 +93,10 @@ void handle(char* line, Print& out, char* action, size_t actionLen) {
 
     if (strcmp(cmd, "PIN") == 0) {
         if (a1 && strcmp(a1, "NEW") == 0) remote::newPin();
+        if (a1 && strcmp(a1, "SET") == 0 && !(a2 && remote::setPin(a2))) {
+            out.println("ERR PIN must be 6 digits");
+            return;
+        }
         out.printf("PIN %s\n", remote::pin());
         return;
     }

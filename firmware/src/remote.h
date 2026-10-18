@@ -18,6 +18,8 @@ void forget(uint16_t connHandle);
 // 6-digit PIN, kept in NVS.
 const char* pin();
 void newPin();
+// Own PIN: exactly 6 digits, else false.
+bool setPin(const char* pin);
 // Next received byte from logged-in clients, -1 if none. Call from loop().
 int read();
 // Responses to logged-in clients, sent as notifications.

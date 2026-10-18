@@ -270,7 +270,7 @@
     </div>
     <div class="row" style="margin-top:10px">
       <span>PIN Bluetooth: <strong id="valPin">—</strong></span>
-      <button id="btnNewPin" type="button" data-icon="lock" title="Nowy PIN dla kolejnych połączeń Bluetooth">Nowy PIN</button>
+      <button id="btnNewPin" type="button" data-icon="lock" title="Własny lub losowy PIN dla kolejnych połączeń Bluetooth">Zmień PIN</button>
     </div>
     <div class="row" style="margin-top:10px">
       <button id="btnHost" type="button" data-icon="bluetooth" disabled>Odłącz</button>
@@ -1165,7 +1165,13 @@ $("inText").addEventListener("keydown", (e) => {
 setLive(!!store.live);
 
 $("btnNewPin").onclick = () => {
-  if (link && confirm("Wygenerować nowy PIN? Inne telefony i komputery łączące się przez Bluetooth będą musiały go wpisać.")) send("PIN NEW");
+  if (!link) return;
+  const pin = prompt("Nowy PIN: 6 cyfr. Puste pole = losowy.\nInne telefony i komputery łączące się przez Bluetooth będą musiały go wpisać.");
+  if (pin === null) return;
+  const p = pin.trim();
+  if (!p) send("PIN NEW");
+  else if (/^\d{6}$/.test(p)) send("PIN SET " + p);
+  else alert("PIN musi mieć dokładnie 6 cyfr.");
 };
 $("btnSettings").onclick = () => $("dlgSettings").showModal();
 $("btnCloseSettings").onclick = () => $("dlgSettings").close();

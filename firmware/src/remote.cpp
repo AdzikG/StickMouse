@@ -187,6 +187,15 @@ const char* pin() { return pinCode; }
 // Clients already logged in stay; the new PIN applies to the next connections.
 void newPin() { generatePin(); }
 
+bool setPin(const char* p) {
+    if (strlen(p) != 6) return false;
+    for (const char* c = p; *c; ++c)
+        if (*c < '0' || *c > '9') return false;
+    strcpy(pinCode, p);
+    prefs.putString("pin", pinCode);
+    return true;
+}
+
 int read() {
     int c = -1;
     portENTER_CRITICAL(&lock);
